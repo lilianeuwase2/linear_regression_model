@@ -7,16 +7,15 @@ import 'package:http/http.dart' as http;
 /// Address of my deployed API.
 const String apiUrl = 'https://maize-yield-api-j1gx.onrender.com/predict';
 
-/// The app's colours, kept in one place.
-/// Mostly neutral colours, with maize gold used only as a small highlight.
-const Color ink = Color(0xFF1F2933); // dark slate: titles, text and the Predict button
-const Color muted = Color(0xFF5F6B76); // grey: hints and small text
-const Color paper = Color(0xFFF7F5F0); // warm off-white: the page background
-const Color line = Color(0xFFE4DFD5); // light border around cards and fields
-const Color maize = Color(0xFFE0A100); // maize gold: the one accent colour
-const Color maizeLight = Color(0xFFFFF4D6); // pale gold: background of the result
-const Color errorRed = Color(0xFFB42318); // error text and icon
-const Color errorLight = Color(0xFFFDECEA); // background of an error
+const Color leaf = Color(0xFF2E6B34);
+const Color ink = Color(0xFF1F2D1F);
+const Color muted = Color(0xFF5B6B57);
+const Color paper = Color(0xFFF8F6EC);
+const Color line = Color(0xFFDCE3CF);
+const Color maize = Color(0xFFF2B705);
+const Color maizeLight = Color(0xFFFFF6D5);
+const Color errorRed = Color(0xFFB42318);
+const Color errorLight = Color(0xFFFDECEA);
 
 ///starting the app
 void main() {
@@ -34,8 +33,8 @@ class MaizeYieldApp extends StatelessWidget {
       theme: ThemeData(
         useMaterial3: true,
         // primary is used by the Predict button, the focused field border and the cursor
-        colorScheme: ColorScheme.fromSeed(seedColor: maize).copyWith(
-          primary: ink,
+        colorScheme: ColorScheme.fromSeed(seedColor: leaf).copyWith(
+          primary: leaf,
           onPrimary: Colors.white,
           error: errorRed,
         ),
@@ -101,9 +100,8 @@ class _PredictionPageState extends State<PredictionPage> {
   };
 
   bool _loading = false;
-  String? _error; // a readable error message, or null
-  double? _yieldPerHa; // tonnes per hectare returned by the API, or null
-
+  String? _error; 
+ double? _yieldPerHa; 
   @override
   void dispose() {
     for (final controller in _controllers.values) {
@@ -212,9 +210,9 @@ class _PredictionPageState extends State<PredictionPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Maize Yield Predictor', style: TextStyle(fontWeight: FontWeight.w600)),
-        backgroundColor: paper,
-        foregroundColor: ink,
-        surfaceTintColor: Colors.transparent, // stops the bar changing colour when you scroll
+        backgroundColor: leaf,
+        foregroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent, // stops the bar changing colour when scrolling
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -267,7 +265,7 @@ class _PredictionPageState extends State<PredictionPage> {
         children: [
           Row(
             children: [
-              Icon(icon, size: 20, color: muted),
+              Icon(icon, size: 20, color: leaf),
               const SizedBox(width: 8),
               Text(title,
                   style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: ink)),
@@ -337,7 +335,7 @@ class _PredictionPageState extends State<PredictionPage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.agriculture, color: ink),
+          const Icon(Icons.agriculture, color: leaf),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
