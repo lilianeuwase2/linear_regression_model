@@ -1,7 +1,7 @@
 """Maize Yield Prediction API.
 
 Predicts maize yield (tonnes per hectare) for one farm field from climate and
-farming conditions, using the best model from the notebook (a random forest).
+farming conditionu using the best model from the notebook which is random forest 
 
 Routes:
     POST /predict  -> predicted yield for one field
@@ -47,15 +47,22 @@ app = FastAPI(
                 "from rainfall, temperature, dryness, fertilizer and farming practices.",
     version="1.0.0",
 )
-#CORS controls which websites may call this API from a visitor's browser
-# Allow origin 
-# Allow methods: GET and POST
-# Allow headers: Content-Type and Accept
-# Restrict credentials From being sent (cookies,login) to the API
-
+# CORS controls which WEBSITES may call this API from a visitor's browser.
+# ALLOW:
+#   - origins: only my own Render site (where Swagger UI runs) and the local address
+#     of my Flutter app if I test it as a web page (flutter run -d chrome --web-port 8080).
+#     No wildcard "*", so the browser blocks every other website.
+#   - methods: GET (to open /docs) and POST (/predict and /retrain). PUT, PATCH and
+#     DELETE are not needed, so they are blocked.
+#   - headers: only Content-Type and Accept, the two headers a JSON request or a
+#     file upload needs.
+# RESTRICT:
+#   - credentials: False. The API has no logins or cookies, so browsers must not send them.
+# WHY: allowing only what the API needs stops unknown websites from using it.
+# Note: my Flutter MOBILE app is not a browser, so CORS does not apply to it.
 
 ALLOWED_ORIGINS = [
-    "https://maize-yield-api.onrender.com",   
+    "https://maize-yield-api-j1gx.onrender.com",   
     "http://localhost:8080",                  
     "http://127.0.0.1:8080",
 ]
@@ -102,7 +109,7 @@ def predict_yield(field: dict) -> float:
     return float(model.predict(row)[0])
 
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def home():
     return {"message": "Maize Yield Prediction API. Open /docs to try it."}
 
@@ -116,7 +123,7 @@ def predict(field: FieldInput):
     }
 
 
-# retraining the model with new data
+# checking the uploaded CSV 
 def check_new_data(new_df: pd.DataFrame) -> pd.DataFrame:
     """Check that the uploaded CSV has the right columns and realistic values."""
     missing = [col for col in FEATURES + [TARGET] if col not in new_df.columns]
@@ -144,6 +151,8 @@ def check_new_data(new_df: pd.DataFrame) -> pd.DataFrame:
         raise HTTPException(status_code=422, detail=errors[:10])
     return new_df
 
+# Retraining the model with new data
+
 
 @app.post("/retrain")
 async def retrain(file: UploadFile = File(..., description="CSV with the 10 input columns and yield_t_ha")):
@@ -168,18 +177,18 @@ async def retrain(file: UploadFile = File(..., description="CSV with the 10 inpu
     mse_before = mean_squared_error(test_df[TARGET], model.predict(test_df[FEATURES]))
 
     if isinstance(estimator, SGDRegressor):
-        # Gradient descent: continue training the saved model on the new rows only
+        # Gradient descent continuing training the saved model on the new rows only
         estimator.partial_fit(preprocess.transform(new_df[FEATURES]), new_df[TARGET])
         how = "SGDRegressor: continued training with partial_fit on the new rows"
     elif isinstance(estimator, RandomForestRegressor):
-        # Random forest: keep all existing trees and grow new ones on original + new data
+        # Random forest keep all existing trees and grow new ones on original and new data
         trees_before = estimator.n_estimators
         estimator.set_params(warm_start=True, n_estimators=trees_before + TREES_TO_ADD)
         estimator.fit(preprocess.transform(combined[FEATURES]), combined[TARGET])
         how = (f"RandomForest: kept the {trees_before} existing trees and added {TREES_TO_ADD} "
                f"new trees trained on the original data plus the new rows")
     else:
-        # Any other model: refit on the original data plus the new rows
+        # Any other model refit on the original data plus the new rows
         estimator.fit(preprocess.transform(combined[FEATURES]), combined[TARGET])
         how = f"{type(estimator).__name__}: refit on the original data plus the new rows"
 
