@@ -23,7 +23,7 @@ Source: [Zenodo record 11122388](https://zenodo.org/records/11122388) (DOI: [10.
 
 ## Video demo
 
-YouTube: 
+YouTube: https://youtu.be/Mbt_X0MJTiQ?si=N0p7XEQGFwcCNhNt
 
 ## How to run the mobile app
 
