@@ -3,7 +3,7 @@
 ## Mission and problem
 
 My mission is to help African farming communities protect their food supply from climate change.
-Rising temperatures and less predictable rains are cutting maize harvests in Rwanda and the region, which leads to food shortages.
+Rising temperatures and less predictable rains are cutting maize harvests in Rwanda and the region, which leads to food shortages (Schlenker & Lobell, 2010; Abebaw, 2025).
 Farmers cannot easily tell how much the climate and their own farming choices will change their harvest.
 This project predicts the maize yield of a field (tonnes per hectare) from its climate and farming conditions.
 
@@ -72,3 +72,8 @@ linear_regression_model/
     │   └── data/                      # training, test and new-data CSV files for /retrain
     └── FlutterApp/                    # one-page Flutter mobile app
 ```
+
+## References
+
+- Abebaw, S. (2025). A global review of the impacts of climate change and variability on agricultural productivity and farmers' adaptation strategies. *Food Science & Nutrition*, 13(5), e70260. https://doi.org/10.1002/fsn3.70260
+- Schlenker, W., & Lobell, D. B. (2010). Robust negative impacts of climate change on African agriculture. *Environmental Research Letters*, 5(1), 014010. https://doi.org/10.1088/1748-9326/5/1/014010
