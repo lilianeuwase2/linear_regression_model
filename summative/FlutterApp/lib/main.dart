@@ -1,12 +1,24 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:material_ui/material_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 /// Address of my deployed API.
 const String apiUrl = 'https://maize-yield-api-j1gx.onrender.com/predict';
 
+/// The app's colours, kept in one place.
+/// Mostly neutral colours, with maize gold used only as a small highlight.
+const Color ink = Color(0xFF1F2933); // dark slate: titles, text and the Predict button
+const Color muted = Color(0xFF5F6B76); // grey: hints and small text
+const Color paper = Color(0xFFF7F5F0); // warm off-white: the page background
+const Color line = Color(0xFFE4DFD5); // light border around cards and fields
+const Color maize = Color(0xFFE0A100); // maize gold: the one accent colour
+const Color maizeLight = Color(0xFFFFF4D6); // pale gold: background of the result
+const Color errorRed = Color(0xFFB42318); // error text and icon
+const Color errorLight = Color(0xFFFDECEA); // background of an error
+
+///starting the app
 void main() {
   runApp(const MaizeYieldApp());
 }
@@ -19,38 +31,62 @@ class MaizeYieldApp extends StatelessWidget {
     return MaterialApp(
       title: 'Maize Yield Predictor',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(colorSchemeSeed: Colors.green, useMaterial3: true),
+      theme: ThemeData(
+        useMaterial3: true,
+        // primary is used by the Predict button, the focused field border and the cursor
+        colorScheme: ColorScheme.fromSeed(seedColor: maize).copyWith(
+          primary: ink,
+          onPrimary: Colors.white,
+          error: errorRed,
+        ),
+        scaffoldBackgroundColor: paper,
+      ),
       home: const PredictionPage(),
     );
   }
 }
 
-/// A single input field: its name, label, hint and whether it must be a number.
+/// describing the 10 input fields for the maize yield prediction.
+/// A single input field: its name, label, hint, the card it is shown in,
+/// and whether it must be a number.
 class InputSpec {
-  const InputSpec(this.key, this.label, this.hint, {this.isNumber = true});
+  const InputSpec(this.key, this.label, this.hint, this.section, {this.isNumber = true});
 
   final String key;
   final String label;
   final String hint;
+  final String section;
   final bool isNumber;
 }
 
-/// The 10 inputs, in the same order and with the same names as the API.
+/// The cards on the page, in the order they are shown, each with its icon.
+const Map<String, IconData> sections = {
+  'Location': Icons.place_outlined,
+  'Weather this season': Icons.wb_sunny_outlined,
+  'Fertilizer': Icons.science_outlined,
+  'Seed and damage': Icons.grass_outlined,
+};
+
+/// The 10 inputs, with the same names as the API.
 const List<InputSpec> inputs = [
-  InputSpec('rainfall_mm', 'Season rainfall (mm)', '200 – 2500, e.g. 900'),
-  InputSpec('avg_temp_c', 'Average temperature (°C)', '10 – 30, e.g. 20'),
-  InputSpec('aridity_index', 'Aridity index', '0.3 – 3.0, e.g. 1.2 (higher = wetter)'),
-  InputSpec('nitrogen_kg_ha', 'Nitrogen fertilizer (kg/ha)', '0 – 350, e.g. 40'),
-  InputSpec('phosphorus_kg_ha', 'Phosphorus fertilizer (kg/ha)', '0 – 150, e.g. 20'),
   InputSpec('country', 'Country', 'Burundi, Kenya, Nigeria, Rwanda, Tanzania, Uganda or Zambia',
-      isNumber: false),
-  InputSpec('hybrid_seed', 'Hybrid seed planted?', 'yes or no', isNumber: false),
-  InputSpec('pest_damage', 'Pest damage?', 'yes or no', isNumber: false),
-  InputSpec('excess_water', 'Damage from too much rain?', 'yes or no', isNumber: false),
+      'Location', isNumber: false),
+  InputSpec('rainfall_mm', 'Season rainfall (mm)', '200 – 2500, e.g. 900', 'Weather this season'),
+  InputSpec('avg_temp_c', 'Average temperature (°C)', '10 – 30, e.g. 20', 'Weather this season'),
+  InputSpec('aridity_index', 'Aridity index', '0.3 – 3.0, e.g. 1.2 (higher = wetter)',
+      'Weather this season'),
+  InputSpec('nitrogen_kg_ha', 'Nitrogen fertilizer (kg/ha)', '0 – 350, e.g. 40', 'Fertilizer'),
+  InputSpec('phosphorus_kg_ha', 'Phosphorus fertilizer (kg/ha)', '0 – 150, e.g. 20', 'Fertilizer'),
   InputSpec('fertilizer_in_hole', 'Fertilizer put in the planting hole?', 'yes or no',
+      'Fertilizer', isNumber: false),
+  InputSpec('hybrid_seed', 'Hybrid seed planted?', 'yes or no', 'Seed and damage',
+      isNumber: false),
+  InputSpec('pest_damage', 'Pest damage?', 'yes or no', 'Seed and damage', isNumber: false),
+  InputSpec('excess_water', 'Damage from too much rain?', 'yes or no', 'Seed and damage',
       isNumber: false),
 ];
 
+///the page and its state
 class PredictionPage extends StatefulWidget {
   const PredictionPage({super.key});
 
@@ -65,8 +101,8 @@ class _PredictionPageState extends State<PredictionPage> {
   };
 
   bool _loading = false;
-  String? _result;
-  bool _isError = false; 
+  String? _error; // a readable error message, or null
+  double? _yieldPerHa; // tonnes per hectare returned by the API, or null
 
   @override
   void dispose() {
@@ -76,8 +112,7 @@ class _PredictionPageState extends State<PredictionPage> {
     super.dispose();
   }
 
-  /// Reads the 10 text fields and builds the request body
-  /// 
+  /// Reading the fields and checking for missing or invalid values.
   /// Missing values and numbers that are not numbers are added to [problems]
   Map<String, dynamic> _readInputs(List<String> problems) {
     final body = <String, dynamic>{};
@@ -102,14 +137,14 @@ class _PredictionPageState extends State<PredictionPage> {
     return body;
   }
 
-  /// Sends the inputs to the API and shows the prediction or an error
+  ///calling the API to get the prediction
   Future<void> _predict() async {
     FocusScope.of(context).unfocus(); // close the keyboard
 
     final problems = <String>[];
     final body = _readInputs(problems);
     if (problems.isNotEmpty) {
-      _show(problems.join('\n'), isError: true);
+      _showError(problems.join('\n'));
       return;
     }
 
@@ -125,94 +160,91 @@ class _PredictionPageState extends State<PredictionPage> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final tonnes = (data['predicted_yield_t_ha'] as num).toStringAsFixed(2);
-        final kg = (data['predicted_yield_kg_ha'] as num).round();
-        _show('Predicted maize yield:\n$tonnes tonnes per hectare\n(about $kg kg per hectare)',
-            isError: false);
+        _showResult((data['predicted_yield_t_ha'] as num).toDouble());
       } else if (response.statusCode == 422) {
         // The API returns a list of validation errors in the "detail" field of the JSON response.
-        _show(_readableApiErrors(jsonDecode(response.body)['detail']), isError: true);
+        _showError(_readableApiErrors(jsonDecode(response.body)['detail']));
       } else {
-        _show('The server returned an error (${response.statusCode}). Please try again.',
-            isError: true);
+        _showError('The server returned an error (${response.statusCode}). Please try again.');
       }
     } on TimeoutException {
-      _show('The server took too long to answer. It may be waking up: please tap Predict again.',
-          isError: true);
+      _showError('The server took too long to answer. It may be waking up: please tap Predict again.');
     } catch (e) {
-      _show('Could not reach the server. Check your internet connection and try again.',
-          isError: true);
+      _showError('Could not reach the server. Check your internet connection and try again.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  /// Turns the API's validation errors (status 422) into readable sentences.
+  /// Turning API errors into readable messages
   String _readableApiErrors(dynamic detail) {
     if (detail is! List) return 'Some values are not valid. Please check your inputs.';
     final lines = <String>[];
     for (final error in detail) {
       final key = (error['loc'] as List).last.toString();
       final label = inputs
-          .firstWhere((input) => input.key == key, orElse: () => InputSpec(key, key, ''))
+          .firstWhere((input) => input.key == key, orElse: () => InputSpec(key, key, '', ''))
           .label;
       lines.add('$label: ${error['msg']}.');
     }
     return lines.join('\n');
   }
 
-  void _show(String message, {required bool isError}) {
+  void _showResult(double yieldPerHa) {
     if (!mounted) return;
     setState(() {
-      _result = message;
-      _isError = isError;
+      _yieldPerHa = yieldPerHa;
+      _error = null;
     });
   }
 
+  void _showError(String message) {
+    if (!mounted) return;
+    setState(() {
+      _error = message;
+      _yieldPerHa = null;
+    });
+  }
+
+  /// the layout of the page: the cards of text fields, the Predict button, and the result area.
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Maize Yield Predictor'),
-        backgroundColor: colors.primaryContainer,
+        title: const Text('Maize Yield Predictor', style: TextStyle(fontWeight: FontWeight.w600)),
+        backgroundColor: paper,
+        foregroundColor: ink,
+        surfaceTintColor: Colors.transparent, // stops the bar changing colour when you scroll
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Text(
                 'Enter the conditions of one maize field to predict its harvest.',
-                style: TextStyle(fontSize: 16),
+                style: TextStyle(fontSize: 15, color: muted),
               ),
               const SizedBox(height: 16),
-              // One labelled text field per input variable (10 in total)
-              for (final input in inputs) ...[
-                TextField(
-                  controller: _controllers[input.key],
-                  keyboardType: input.isNumber
-                      ? const TextInputType.numberWithOptions(decimal: true)
-                      : TextInputType.text,
-                  textInputAction: TextInputAction.next,
-                  decoration: InputDecoration(
-                    labelText: input.label,
-                    helperText: input.hint,
-                    helperMaxLines: 2,
-                    border: const OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
+              // One card per section; inside it, one labelled text field per input (10 in total)
+              for (final section in sections.entries)
+                _buildSection(section.key, section.value, [
+                  for (final input in inputs.where((spec) => spec.section == section.key))
+                    _buildField(_controllers[input.key]!, input.label, input.hint,
+                        isNumber: input.isNumber),
+                ]),
               const SizedBox(height: 4),
               FilledButton(
                 onPressed: _loading ? null : _predict,
-                style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(52),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
                 child: const Text('Predict', style: TextStyle(fontSize: 18)),
               ),
               const SizedBox(height: 16),
-              _buildResultArea(colors),
+              _buildResultArea(),
             ],
           ),
         ),
@@ -220,38 +252,122 @@ class _PredictionPageState extends State<PredictionPage> {
     );
   }
 
-  /// The display area that shows the prediction, an error, or a waiting message.
-  Widget _buildResultArea(ColorScheme colors) {
-    String text;
-    IconData icon;
-    Color background;
-    Color foreground;
+  /// A white card with a small icon and title, holding a group of text fields.
+  Widget _buildSection(String title, IconData icon, List<Widget> fields) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 20, color: muted),
+              const SizedBox(width: 8),
+              Text(title,
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: ink)),
+            ],
+          ),
+          ...fields,
+        ],
+      ),
+    );
+  }
 
+  /// One labelled text field.
+  Widget _buildField(TextEditingController controller, String label, String hint,
+      {required bool isNumber}) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: TextField(
+        controller: controller,
+        keyboardType:
+            isNumber ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
+        textInputAction: TextInputAction.next,
+        decoration: InputDecoration(
+          labelText: label,
+          helperText: hint,
+          helperMaxLines: 2,
+          filled: true,
+          fillColor: Colors.white,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: line),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The display area: a waiting message, an error, an empty hint, or the prediction.
+  Widget _buildResultArea() {
     if (_loading) {
-      text = 'Predicting...\nThe first request can take up to a minute while the server wakes up.';
-      icon = Icons.hourglass_top;
-      background = colors.surfaceContainerHighest;
-      foreground = colors.onSurfaceVariant;
-    } else if (_result == null) {
-      text = 'Your prediction will appear here.';
-      icon = Icons.info_outline;
-      background = colors.surfaceContainerHighest;
-      foreground = colors.onSurfaceVariant;
-    } else if (_isError) {
-      text = _result!;
-      icon = Icons.error_outline;
-      background = colors.errorContainer;
-      foreground = colors.onErrorContainer;
-    } else {
-      text = _result!;
-      icon = Icons.agriculture;
-      background = colors.primaryContainer;
-      foreground = colors.onPrimaryContainer;
+      return _messageBox(
+        Icons.hourglass_top,
+        'Predicting...\nThe first request can take up to a minute while the server wakes up.',
+        background: Colors.white,
+        foreground: muted,
+      );
     }
+    if (_error != null) {
+      return _messageBox(Icons.error_outline, _error!,
+          background: errorLight, foreground: errorRed);
+    }
+    if (_yieldPerHa == null) {
+      return _messageBox(Icons.info_outline, 'Your prediction will appear here.',
+          background: Colors.white, foreground: muted);
+    }
+
+    // We have a prediction: show it in tonnes and in kilograms per hectare.
+    final perHa = _yieldPerHa!;
 
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(
+        color: maizeLight,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: maize, width: 1.5),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.agriculture, color: ink),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Predicted maize yield', style: TextStyle(fontSize: 14, color: muted)),
+                const SizedBox(height: 4),
+                Text('${perHa.toStringAsFixed(2)} tonnes per hectare',
+                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: ink)),
+                const SizedBox(height: 6),
+                Text('About ${(perHa * 1000).round()} kg per hectare.',
+                    style: const TextStyle(fontSize: 14, color: ink)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// A simple box with an icon and a message (waiting, error or empty).
+  Widget _messageBox(IconData icon, String text,
+      {required Color background, required Color foreground}) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: line),
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
