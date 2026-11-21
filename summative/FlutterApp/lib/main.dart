@@ -136,6 +136,8 @@ class _PredictionPageState extends State<PredictionPage> {
   }
 
   ///calling the API to get the prediction
+
+
   Future<void> _predict() async {
     FocusScope.of(context).unfocus(); // close the keyboard
 
