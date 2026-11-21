@@ -1,30 +1,38 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:material_ui/material_ui.dart';
 
 import 'package:maize_yield_app/main.dart';
 
+/// Scrolls to the Predict button (the page is long) and taps it.
+Future<void> tapPredict(WidgetTester tester) async {
+  await tester.ensureVisible(find.text('Predict'));
+  await tester.tap(find.text('Predict'));
+  await tester.pump();
+}
+
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('Page has 10 text fields, a Predict button and a display area', (tester) async {
+    await tester.pumpWidget(const MaizeYieldApp());
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    expect(find.byType(TextField), findsNWidgets(10));
+    expect(find.text('Predict'), findsOneWidget);
+    expect(find.text('Your prediction will appear here.'), findsOneWidget);
+  });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+  testWidgets('Empty fields show a readable error in the display area', (tester) async {
+    await tester.pumpWidget(const MaizeYieldApp());
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    await tapPredict(tester);
+
+    expect(find.textContaining('Season rainfall (mm) is missing.'), findsOneWidget);
+  });
+
+  testWidgets('Text in a number field shows a wrong-type error', (tester) async {
+    await tester.pumpWidget(const MaizeYieldApp());
+
+    await tester.enterText(find.widgetWithText(TextField, 'Season rainfall (mm)'), 'abc');
+    await tapPredict(tester);
+
+    expect(find.textContaining('must be a number'), findsOneWidget);
   });
 }
